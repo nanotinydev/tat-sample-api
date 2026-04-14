@@ -1,5 +1,7 @@
 # Sample API — tat Demo
 
+[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/nanotinydev/tat-sample-api)
+
 A self-contained mock API server with [`tat`](https://www.npmjs.com/package/@nanotiny/tiny-api-test) test files that demonstrate every major `tat-cli` feature.
 
 This project is designed to run **standalone** — clone it, open it in [StackBlitz](https://stackblitz.com), or drop it anywhere on disk. There's no build step and no dependency to install for the server itself; it uses Node's built-in `node:http`. The bundled `package.json` exists only to mark the project as ESM (`"type": "module"`) and to provide convenient `npm` scripts.
