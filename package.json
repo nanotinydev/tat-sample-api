@@ -1,0 +1,11 @@
+{
+  "name": "tat-sample-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Self-contained mock API server with tat test files demonstrating every major tat-cli feature.",
+  "scripts": {
+    "start": "node server.js",
+    "test": "npx -y @nanotiny/tiny-api-test run tests/"
+  }
+}

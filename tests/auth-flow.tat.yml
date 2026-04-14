@@ -1,0 +1,122 @@
+env: ./env.json
+
+suites:
+  - name: "Flow: Register and Login"
+    tags: [auth, flow]
+    tests:
+      - name: Register a new user
+        method: POST
+        url: "{{baseUrl}}/auth/register"
+        body:
+          email: alice@example.com
+          password: secret123
+          name: Alice
+        assert:
+          - "$status == 201"
+          - "id is not null"
+          - "email == 'alice@example.com'"
+          - "name == 'Alice'"
+        capture:
+          registeredEmail: email
+          registeredName: name
+
+      - name: Duplicate register is rejected
+        method: POST
+        url: "{{baseUrl}}/auth/register"
+        body:
+          email: alice@example.com
+          password: secret123
+          name: Alice
+        response: true
+        assert:
+          - "$status == 409"
+          - "error contains 'already'"
+
+      - name: Login with valid credentials
+        method: POST
+        url: "{{baseUrl}}/auth/login"
+        body:
+          email: alice@example.com
+          password: secret123
+        assert:
+          - "$status == 200"
+          - "token is not null"
+          - "refreshToken is not null"
+          - "expiresIn == 3600"
+          - "user.name == 'Alice'"
+          - "$headers.content-type contains 'json'"
+        capture:
+          token: token
+          refreshToken: refreshToken
+          userId: user.id
+        response: true
+
+      - name: Login with wrong password fails
+        method: POST
+        url: "{{baseUrl}}/auth/login"
+        body:
+          email: alice@example.com
+          password: wrongpassword
+        assert:
+          - "$status == 401"
+          - "error is not null"
+
+  - name: "Flow: Profile and Token Management"
+    tags: [auth, flow]
+    tests:
+      - name: Get current user profile
+        method: GET
+        url: "{{baseUrl}}/auth/me"
+        headers:
+          Authorization: "Bearer {{token}}"
+        assert:
+          - "$status == 200"
+          - "id is not null"
+          - "email == 'alice@example.com'"
+          - "name == 'Alice'"
+
+      - name: Profile without token is rejected
+        method: GET
+        url: "{{baseUrl}}/auth/me"
+        assert:
+          - "$status == 401"
+
+      - name: Refresh the token
+        method: POST
+        url: "{{baseUrl}}/auth/refresh"
+        body:
+          refreshToken: "{{refreshToken}}"
+        assert:
+          - "$status == 200"
+          - "token is not null"
+          - "refreshToken is not null"
+        capture:
+          newToken: token
+
+      - name: New token works for profile
+        method: GET
+        url: "{{baseUrl}}/auth/me"
+        headers:
+          Authorization: "Bearer {{newToken}}"
+        assert:
+          - "$status == 200"
+          - "name == 'Alice'"
+
+  - name: "Flow: Logout Invalidates Token"
+    tags: [auth, flow]
+    tests:
+      - name: Logout
+        method: POST
+        url: "{{baseUrl}}/auth/logout"
+        headers:
+          Authorization: "Bearer {{newToken}}"
+        assert:
+          - "$status == 204"
+
+      - name: Token is invalid after logout
+        method: GET
+        url: "{{baseUrl}}/auth/me"
+        headers:
+          Authorization: "Bearer {{newToken}}"
+        assert:
+          - "$status == 401"

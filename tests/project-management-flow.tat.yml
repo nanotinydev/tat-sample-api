@@ -1,0 +1,383 @@
+env: ./env.json
+setup: node scripts/get-token.js
+timeout: 10000
+
+suites:
+  - name: "Flow: Workspace and Members"
+    tags: [workflow, flow]
+    tests:
+      - name: Register a teammate
+        method: POST
+        url: "{{baseUrl}}/auth/register"
+        body:
+          email: dev@example.com
+          password: dev123
+          name: Developer
+        assert:
+          - "$status == 201"
+        capture:
+          teammateId: id
+          teammateEmail: email
+
+      - name: Create a workspace
+        method: POST
+        url: "{{baseUrl}}/workspaces"
+        headers:
+          Authorization: "Bearer {{token}}"
+        body:
+          name: Acme Corp
+          description: Main workspace for the team
+        assert:
+          - "$status == 201"
+          - "id is not null"
+          - "name == 'Acme Corp'"
+          - "description == 'Main workspace for the team'"
+          - "ownerId is not null"
+          - "members is not null"
+        capture:
+          workspaceId: id
+        response:
+          body: true
+
+      - name: List workspaces shows the new one
+        method: GET
+        url: "{{baseUrl}}/workspaces"
+        headers:
+          Authorization: "Bearer {{token}}"
+        assert:
+          - "$status == 200"
+          - "total >= 1"
+          - "data is not null"
+
+      - name: Get workspace by ID
+        method: GET
+        url: "{{baseUrl}}/workspaces/{{workspaceId}}"
+        headers:
+          Authorization: "Bearer {{token}}"
+        assert:
+          - "$status == 200"
+          - "name == 'Acme Corp'"
+
+      - name: Nonexistent workspace returns 404
+        method: GET
+        url: "{{baseUrl}}/workspaces/nonexistent-id"
+        headers:
+          Authorization: "Bearer {{token}}"
+        assert:
+          - "$status == 404"
+
+      - name: Add teammate to workspace
+        method: POST
+        url: "{{baseUrl}}/workspaces/{{workspaceId}}/members"
+        headers:
+          Authorization: "Bearer {{token}}"
+        body:
+          email: "{{teammateEmail}}"
+          role: member
+        assert:
+          - "$status == 201"
+          - "userId is not null"
+          - "role == 'member'"
+
+      - name: Verify workspace has 2 members
+        method: GET
+        url: "{{baseUrl}}/workspaces/{{workspaceId}}/members"
+        headers:
+          Authorization: "Bearer {{token}}"
+        assert:
+          - "$status == 200"
+          - "total == 2"
+
+      - name: Duplicate member is rejected
+        method: POST
+        url: "{{baseUrl}}/workspaces/{{workspaceId}}/members"
+        headers:
+          Authorization: "Bearer {{token}}"
+        body:
+          email: "{{teammateEmail}}"
+          role: member
+        assert:
+          - "$status == 409"
+          - "error contains 'already'"
+
+  - name: "Flow: Project Lifecycle"
+    tags: [workflow, flow]
+    tests:
+      - name: Create first project
+        method: POST
+        url: "{{baseUrl}}/workspaces/{{workspaceId}}/projects"
+        headers:
+          Authorization: "Bearer {{token}}"
+        body:
+          name: Website Redesign
+          description: Redesign the company website
+        assert:
+          - "$status == 201"
+          - "id is not null"
+          - "name == 'Website Redesign'"
+          - "workspaceId is not null"
+          - "status == 'active'"
+          - "createdAt is not null"
+        capture:
+          projectId: id
+
+      - name: Create second project
+        method: POST
+        url: "{{baseUrl}}/workspaces/{{workspaceId}}/projects"
+        headers:
+          Authorization: "Bearer {{token}}"
+        body:
+          name: Mobile App
+          description: Build the mobile app
+        assert:
+          - "$status == 201"
+        capture:
+          project2Id: id
+
+      - name: List shows 2 projects
+        method: GET
+        url: "{{baseUrl}}/workspaces/{{workspaceId}}/projects"
+        headers:
+          Authorization: "Bearer {{token}}"
+        assert:
+          - "$status == 200"
+          - "total == 2"
+
+      - name: Get project by ID
+        method: GET
+        url: "{{baseUrl}}/projects/{{projectId}}"
+        headers:
+          Authorization: "Bearer {{token}}"
+        assert:
+          - "$status == 200"
+          - "name == 'Website Redesign'"
+          - "description == 'Redesign the company website'"
+
+      - name: Update project name and status
+        method: PATCH
+        url: "{{baseUrl}}/projects/{{projectId}}"
+        headers:
+          Authorization: "Bearer {{token}}"
+        body:
+          name: Website Redesign v2
+          status: in_progress
+        assert:
+          - "$status == 200"
+          - "name == 'Website Redesign v2'"
+          - "status == 'in_progress'"
+          - "updatedAt is not null"
+
+      - name: Delete second project
+        method: DELETE
+        url: "{{baseUrl}}/projects/{{project2Id}}"
+        headers:
+          Authorization: "Bearer {{token}}"
+        assert:
+          - "$status == 204"
+
+      - name: Deleted project returns 404
+        method: GET
+        url: "{{baseUrl}}/projects/{{project2Id}}"
+        headers:
+          Authorization: "Bearer {{token}}"
+        assert:
+          - "$status == 404"
+
+      - name: List shows 1 project after delete
+        method: GET
+        url: "{{baseUrl}}/workspaces/{{workspaceId}}/projects"
+        headers:
+          Authorization: "Bearer {{token}}"
+        assert:
+          - "$status == 200"
+          - "total == 1"
+
+  - name: "Flow: Tasks, Comments, and Completion"
+    tags: [workflow, flow]
+    tests:
+      - name: Create a high-priority task
+        method: POST
+        url: "{{baseUrl}}/projects/{{projectId}}/tasks"
+        headers:
+          Authorization: "Bearer {{token}}"
+        body:
+          title: Implement login page
+          description: Build the login form with validation
+          priority: high
+        assert:
+          - "$status == 201"
+          - "id is not null"
+          - "title == 'Implement login page'"
+          - "status == 'open'"
+          - "priority == 'high'"
+          - "assigneeId is null"
+          - "completedAt is null"
+        capture:
+          taskId: id
+
+      - name: Get task by ID
+        method: GET
+        url: "{{baseUrl}}/tasks/{{taskId}}"
+        headers:
+          Authorization: "Bearer {{token}}"
+        assert:
+          - "$status == 200"
+          - "title == 'Implement login page'"
+          - "projectId is not null"
+
+      - name: Update task details
+        method: PATCH
+        url: "{{baseUrl}}/tasks/{{taskId}}"
+        headers:
+          Authorization: "Bearer {{token}}"
+        body:
+          title: Implement login page (with OAuth)
+          priority: critical
+        assert:
+          - "$status == 200"
+          - "title == 'Implement login page (with OAuth)'"
+          - "priority == 'critical'"
+
+      - name: Assign task to teammate
+        method: POST
+        url: "{{baseUrl}}/tasks/{{taskId}}/assign"
+        headers:
+          Authorization: "Bearer {{token}}"
+        body:
+          userId: "{{teammateId}}"
+        assert:
+          - "$status == 200"
+          - "assigneeId is not null"
+
+      - name: Add a progress comment
+        method: POST
+        url: "{{baseUrl}}/tasks/{{taskId}}/comments"
+        headers:
+          Authorization: "Bearer {{token}}"
+        body:
+          text: "Starting work on the login page now."
+        assert:
+          - "$status == 201"
+          - "id is not null"
+          - "text contains 'login page'"
+          - "userId is not null"
+          - "userName is not null"
+          - "taskId is not null"
+          - "createdAt is not null"
+        capture:
+          comment1Id: id
+
+      - name: Add a review comment
+        method: POST
+        url: "{{baseUrl}}/tasks/{{taskId}}/comments"
+        headers:
+          Authorization: "Bearer {{token}}"
+        body:
+          text: "Implementation looks good, ready to merge."
+        assert:
+          - "$status == 201"
+        capture:
+          comment2Id: id
+
+      - name: Task has 2 comments
+        method: GET
+        url: "{{baseUrl}}/tasks/{{taskId}}/comments"
+        headers:
+          Authorization: "Bearer {{token}}"
+        assert:
+          - "$status == 200"
+          - "total == 2"
+
+      - name: Delete progress comment
+        method: DELETE
+        url: "{{baseUrl}}/comments/{{comment1Id}}"
+        headers:
+          Authorization: "Bearer {{token}}"
+        assert:
+          - "$status == 204"
+
+      - name: Task has 1 comment after delete
+        method: GET
+        url: "{{baseUrl}}/tasks/{{taskId}}/comments"
+        headers:
+          Authorization: "Bearer {{token}}"
+        assert:
+          - "$status == 200"
+          - "total == 1"
+
+      - name: Delete nonexistent comment returns 404
+        method: DELETE
+        url: "{{baseUrl}}/comments/nonexistent-id"
+        headers:
+          Authorization: "Bearer {{token}}"
+        assert:
+          - "$status == 404"
+
+      - name: Complete the task
+        method: POST
+        url: "{{baseUrl}}/tasks/{{taskId}}/complete"
+        headers:
+          Authorization: "Bearer {{token}}"
+        assert:
+          - "$status == 200"
+          - "status == 'done'"
+          - "completedAt is not null"
+
+  - name: "Flow: Final Verification"
+    tags: [workflow, flow, smoke]
+    tests:
+      - name: Task is marked done
+        method: GET
+        url: "{{baseUrl}}/tasks/{{taskId}}"
+        headers:
+          Authorization: "Bearer {{token}}"
+        timeout: 5000
+        assert:
+          - "$status == 200"
+          - "status == 'done'"
+          - "assigneeId is not null"
+          - "completedAt is not null"
+          - "$duration < 1000"
+
+      - name: Project still accessible
+        method: GET
+        url: "{{baseUrl}}/projects/{{projectId}}"
+        headers:
+          Authorization: "Bearer {{token}}"
+        assert:
+          - "$status == 200"
+          - "name == 'Website Redesign v2'"
+
+      - name: Workspace still has 2 members
+        method: GET
+        url: "{{baseUrl}}/workspaces/{{workspaceId}}/members"
+        headers:
+          Authorization: "Bearer {{token}}"
+        assert:
+          - "$status == 200"
+          - "total == 2"
+
+      - name: User profile still valid
+        method: GET
+        url: "{{baseUrl}}/auth/me"
+        headers:
+          Authorization: "Bearer {{token}}"
+        assert:
+          - "$status == 200"
+          - "name == 'Test User'"
+
+      - name: Delete the task
+        method: DELETE
+        url: "{{baseUrl}}/tasks/{{taskId}}"
+        headers:
+          Authorization: "Bearer {{token}}"
+        assert:
+          - "$status == 204"
+
+      - name: Deleted task returns 404
+        method: GET
+        url: "{{baseUrl}}/tasks/{{taskId}}"
+        headers:
+          Authorization: "Bearer {{token}}"
+        assert:
+          - "$status == 404"

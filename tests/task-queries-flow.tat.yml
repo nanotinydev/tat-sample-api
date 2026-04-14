@@ -1,0 +1,187 @@
+env: ./env.json
+setup: node scripts/get-token.js
+
+suites:
+  - name: "Flow: Setup Test Data"
+    tags: [queries, flow]
+    tests:
+      - name: Create workspace
+        method: POST
+        url: "{{baseUrl}}/workspaces"
+        headers:
+          Authorization: "Bearer {{token}}"
+        body:
+          name: Query Test Workspace
+        assert:
+          - "$status == 201"
+        capture:
+          workspaceId: id
+
+      - name: Create project
+        method: POST
+        url: "{{baseUrl}}/workspaces/{{workspaceId}}/projects"
+        headers:
+          Authorization: "Bearer {{token}}"
+        body:
+          name: Query Test Project
+        assert:
+          - "$status == 201"
+        capture:
+          projectId: id
+
+  - name: "Flow: Create Varied Tasks"
+    tags: [queries, flow]
+    tests:
+      - name: "Create task: Login feature (high, open)"
+        method: POST
+        url: "{{baseUrl}}/projects/{{projectId}}/tasks"
+        headers:
+          Authorization: "Bearer {{token}}"
+        body:
+          title: Build login feature
+          description: Implement user login with validation
+          priority: high
+          status: open
+        assert:
+          - "$status == 201"
+        capture:
+          loginTaskId: id
+
+      - name: "Create task: Dashboard (medium, open)"
+        method: POST
+        url: "{{baseUrl}}/projects/{{projectId}}/tasks"
+        headers:
+          Authorization: "Bearer {{token}}"
+        body:
+          title: Design dashboard
+          description: Create the main dashboard layout
+          priority: medium
+          status: open
+        assert:
+          - "$status == 201"
+
+      - name: "Create task: Fix bug (high, done)"
+        method: POST
+        url: "{{baseUrl}}/projects/{{projectId}}/tasks"
+        headers:
+          Authorization: "Bearer {{token}}"
+        body:
+          title: Fix login bug
+          description: Fix the broken login redirect
+          priority: high
+          status: done
+        assert:
+          - "$status == 201"
+
+      - name: "Create task: Update docs (low, open)"
+        method: POST
+        url: "{{baseUrl}}/projects/{{projectId}}/tasks"
+        headers:
+          Authorization: "Bearer {{token}}"
+        body:
+          title: Update API docs
+          description: Document the new endpoints
+          priority: low
+          status: open
+        assert:
+          - "$status == 201"
+
+      - name: Assign login task to self
+        method: POST
+        url: "{{baseUrl}}/tasks/{{loginTaskId}}/assign"
+        headers:
+          Authorization: "Bearer {{token}}"
+        body:
+          userId: "{{userId}}"
+        assert:
+          - "$status == 200"
+
+  - name: "Flow: Filter by Status and Priority"
+    tags: [queries, flow]
+    tests:
+      - name: Filter by status=open returns 3
+        method: GET
+        url: "{{baseUrl}}/projects/{{projectId}}/tasks?status=open"
+        headers:
+          Authorization: "Bearer {{token}}"
+        assert:
+          - "$status == 200"
+          - "total == 3"
+
+      - name: Filter by priority=high returns 2
+        method: GET
+        url: "{{baseUrl}}/projects/{{projectId}}/tasks?priority=high"
+        headers:
+          Authorization: "Bearer {{token}}"
+        assert:
+          - "$status == 200"
+          - "total == 2"
+
+      - name: Filter by assignee=me returns 1
+        method: GET
+        url: "{{baseUrl}}/projects/{{projectId}}/tasks?assignee=me"
+        headers:
+          Authorization: "Bearer {{token}}"
+        assert:
+          - "$status == 200"
+          - "total == 1"
+
+      - name: Combined filter priority=high and status=open returns 1
+        method: GET
+        url: "{{baseUrl}}/projects/{{projectId}}/tasks?priority=high&status=open"
+        headers:
+          Authorization: "Bearer {{token}}"
+        assert:
+          - "$status == 200"
+          - "total == 1"
+
+  - name: "Flow: Search, Pagination, and Sort"
+    tags: [queries, flow]
+    tests:
+      - name: Search by keyword 'login' returns 2
+        method: GET
+        url: "{{baseUrl}}/projects/{{projectId}}/tasks?search=login"
+        headers:
+          Authorization: "Bearer {{token}}"
+        assert:
+          - "$status == 200"
+          - "total == 2"
+
+      - name: Paginate page 1 (size 2)
+        method: GET
+        url: "{{baseUrl}}/projects/{{projectId}}/tasks?page=1&pageSize=2"
+        headers:
+          Authorization: "Bearer {{token}}"
+        assert:
+          - "$status == 200"
+          - "page == 1"
+          - "pageSize == 2"
+          - "total == 4"
+
+      - name: Paginate page 2 (size 2)
+        method: GET
+        url: "{{baseUrl}}/projects/{{projectId}}/tasks?page=2&pageSize=2"
+        headers:
+          Authorization: "Bearer {{token}}"
+        assert:
+          - "$status == 200"
+          - "page == 2"
+          - "total == 4"
+
+      - name: Sort by title ascending
+        method: GET
+        url: "{{baseUrl}}/projects/{{projectId}}/tasks?sortBy=title&sortDirection=asc"
+        headers:
+          Authorization: "Bearer {{token}}"
+        assert:
+          - "$status == 200"
+          - "total == 4"
+
+      - name: List all tasks across projects
+        method: GET
+        url: "{{baseUrl}}/tasks"
+        headers:
+          Authorization: "Bearer {{token}}"
+        assert:
+          - "$status == 200"
+          - "total >= 4"
